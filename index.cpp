@@ -51,7 +51,6 @@ public:
     }
 };
 
-// crearCuenta va FUERA de la clase
 void crearCuenta(MYSQL* conn) {
     string nombre, tipo;
     double saldo;
@@ -71,6 +70,50 @@ void crearCuenta(MYSQL* conn) {
     delete cuenta;
 }
 
+void depositar(MYSQL* conn){
+
+        string numero_cuenta;
+        double monto;
+
+        cin.ignore();
+
+        cout<<"Numero de cuenta: ";
+        getline(cin,numero_cuenta);
+
+        string query ="SELECT * FROM cuentas WHERE numero_cuenta ='"+ numero_cuenta + "'";
+        mysql_query(conn, query.c_str());
+        MYSQL_RES* result = mysql_store_result(conn);
+
+        if(mysql_num_rows(result) == 0){
+
+               cout<<"Cuenta no encontrada";
+               mysql_free_result(result);
+               return;
+        }
+
+         mysql_free_result(result);
+
+         cout<<"Monto a depositar: Q";
+         cin>> monto;
+
+         string update = "UPDATE  cuentas SET saldo = saldo + " + to_string(monto)
+         + " WHERE numero_cuenta = '" + numero_cuenta + "'";
+
+         if(mysql_query(conn, update.c_str())){
+           cout<<"Error al depositar: "<<mysql_error(conn) << endl;
+           return;
+         }
+
+         string transacciones = "INSERT INTO transacciones (numero_cuenta, tipo, monto) VALUES('"
+        + numero_cuenta + "', 'deposito', " + to_string(monto )+ ")";
+
+         mysql_query(conn, transacciones.c_str());
+
+        cout<<"===== Deposito Exitoso ======="<<endl;
+        cout<<"Cuenta : " <<numero_cuenta<<endl;
+        cout<<"Monto : Q"<<monto<<endl;
+        cout<<"================================";
+}
 int main() {
     MYSQL* conn = mysql_init(nullptr);
     if (!mysql_real_connect(conn, "localhost", "root", "1234", "banco", 3306, nullptr, 0)) {
@@ -83,7 +126,8 @@ int main() {
     do {
         cout << "\n=== Sistema Bancario ===\n";
         cout << "1. Crear cuenta\n";
-        cout << "0. Salir\n";
+        cout << "2.Depositar \n";
+        cout << "3. Salir\n";
         cout << "Opcion: ";
         cin >> opcion;
 
@@ -91,14 +135,20 @@ int main() {
             case 1:
                 crearCuenta(conn);
                 break;
-            case 0:
-                cout << "Saliendo...\n";
+            
+                case 2:
+                    depositar(conn);
                 break;
+
+            case 3:
+                cout << "Saliendo\n";
+                break;
+
             default:
                 cout << "Opcion invalida\n";
         }
 
-    } while (opcion != 0);
+    } while (opcion != 3);
 
     mysql_close(conn);
     return 0;
