@@ -6,150 +6,357 @@
 
 using namespace std;
 
-class Cuenta {
-public:
+
+struct Transaccion {
     string numero_cuenta;
-    string nombre_titular;
+    string tipo;
+    double monto;
+};
+
+struct Transferencia {
+    string origen;
+    string destino;
+    double monto;
+};
+
+
+class Cuenta {
+
+private:
+    string numero;
+    string nombre;
     string tipo;
     double saldo;
 
-    Cuenta(string nombre, string tipo, double saldo_inicial) {
-        this->nombre_titular = nombre;
-        this->tipo = tipo;
-        this->saldo = saldo_inicial;
-        this->numero_cuenta = generarNumeroCuenta();
+public:
+
+    Cuenta(string n, string nom, string t, double s) {
+        numero = n;
+        nombre = nom;
+        tipo = t;
+        saldo = s;
     }
 
-    string generarNumeroCuenta() {
-        srand(time(nullptr));
-        string numero = "";
-        for (int i = 0; i < 10; i++) {
-            numero += to_string(rand() % 10);
-        }
-        return numero;
-    }
-
-    bool guardarEnDB(MYSQL* conn) {
-        string query = "INSERT INTO cuentas (numero_cuenta, nombre_titular, tipo, saldo) VALUES ('"
-            + numero_cuenta + "', '"
-            + nombre_titular + "', '"
-            + tipo + "', "
-            + to_string(saldo) + ")";
-
-        if (mysql_query(conn, query.c_str())) {
-            cout << "Error al guardar: " << mysql_error(conn) << "\n";
-            return false;
-        }
-
-        cout << "\n=== Cuenta Creada Exitosamente ===\n";
-        cout << "Numero de cuenta : " << numero_cuenta << "\n";
-        cout << "Titular          : " << nombre_titular << "\n";
-        cout << "Tipo             : " << tipo << "\n";
-        cout << "Saldo inicial    : Q" << saldo << "\n";
-        cout << "==================================\n";
-        return true;
-    }
+    string getNumero() { return numero; }
+    string getNombre() { return nombre; }
+    string getTipo() { return tipo; }
+    double getSaldo() { return saldo; }
 };
 
-void crearCuenta(MYSQL* conn) {
-    string nombre, tipo;
+MYSQL* conn;
+
+void conectar() {
+
+    conn = mysql_init(NULL);
+
+    conn = mysql_real_connect(
+        conn,
+        "localhost",
+        "root",
+        "1234",
+        "banco",
+        3306,
+        NULL,
+        0
+    );
+
+    if(conn)
+        cout << "Conexion OK\n";
+    else
+        cout << "Error conexion\n";
+}
+
+string generarNumeroCuenta() {
+
+    string numero;
+
+    for(int i = 0; i < 10; i++) {
+        numero += to_string(rand() % 10);
+    }
+
+    return numero;
+}
+
+void crearCuenta() {
+
+    string nombre, tipo, correo;
     double saldo;
 
     cin.ignore();
-    cout << "\nNombre del titular: ";
+
+    cout << "Nombre: " <<endl;
     getline(cin, nombre);
 
-    cout << "Tipo de cuenta (ahorro/monetaria): ";
+    cout << "Correo: " <<endl;
+    getline(cin, correo);
+
+    cout << "Tipo (ahorro/monetaria): " <<endl;
     cin >> tipo;
 
-    cout << "Saldo inicial: Q";
+    cout << "Saldo inicial:Q " <<endl;
     cin >> saldo;
 
-    Cuenta* cuenta = new Cuenta(nombre, tipo, saldo);
-    cuenta->guardarEnDB(conn);
-    delete cuenta;
+    string numero = generarNumeroCuenta();
+
+    Cuenta* c = new Cuenta(numero, nombre, tipo, saldo);
+
+    string query =
+    "INSERT INTO cuentas(numero_cuenta,nombre_titular,tipo,saldo,correo_electronico) VALUES('"
+    + c->getNumero() + "','" + c->getNombre() + "','" + c->getTipo() + "',"
+    + to_string(c->getSaldo()) + ",'" + correo + "')";
+
+    mysql_query(conn, query.c_str());
+
+    cout<<"CUENTA CREADA EXISTOSAMENTE: "<<endl;
+    cout << "Cuenta creada\n";
+    cout << "Numero: " << c->getNumero() << endl;
+
+    delete c;
 }
 
-void depositar(MYSQL* conn){
+void depositar() {
 
-        string numero_cuenta;
-        double monto;
+    string numero;
+    double monto;
 
-        cin.ignore();
+    cin.ignore();
 
-        cout<<"Numero de cuenta: ";
-        getline(cin,numero_cuenta);
+    cout << "\nCuenta: ";
+    getline(cin, numero);
 
-        string query ="SELECT * FROM cuentas WHERE numero_cuenta ='"+ numero_cuenta + "'";
-        mysql_query(conn, query.c_str());
-        MYSQL_RES* result = mysql_store_result(conn);
+    cout << "Monto: ";
+    cin >> monto;
 
-        if(mysql_num_rows(result) == 0){
+    string q =
+    "UPDATE cuentas SET saldo = saldo + " + to_string(monto)
+    + " WHERE numero_cuenta = '" + numero + "'";
 
-               cout<<"Cuenta no encontrada";
-               mysql_free_result(result);
-               return;
-        }
+    mysql_query(conn, q.c_str());
 
-         mysql_free_result(result);
+    Transaccion t;
+    t.numero_cuenta = numero;
+    t.tipo = "deposito";
+    t.monto = monto;
 
-         cout<<"Monto a depositar: Q";
-         cin>> monto;
+    string ins =
+    "INSERT INTO transacciones(numero_cuenta,tipo,monto) VALUES('"
+    + t.numero_cuenta + "','" + t.tipo + "'," + to_string(t.monto) + ")";
 
-         string update = "UPDATE  cuentas SET saldo = saldo + " + to_string(monto)
-         + " WHERE numero_cuenta = '" + numero_cuenta + "'";
+    mysql_query(conn, ins.c_str());
 
-         if(mysql_query(conn, update.c_str())){
-           cout<<"Error al depositar: "<<mysql_error(conn) << endl;
-           return;
-         }
+    cout<<"DEPOSITO SE REALIZO EXISTOSAMENTE: "<<endl;
 
-         string transacciones = "INSERT INTO transacciones (numero_cuenta, tipo, monto) VALUES('"
-        + numero_cuenta + "', 'deposito', " + to_string(monto )+ ")";
-
-         mysql_query(conn, transacciones.c_str());
-
-        cout<<"===== Deposito Exitoso ======="<<endl;
-        cout<<"Cuenta : " <<numero_cuenta<<endl;
-        cout<<"Monto : Q"<<monto<<endl;
-        cout<<"================================";
 }
-int main() {
-    MYSQL* conn = mysql_init(nullptr);
-    if (!mysql_real_connect(conn, "localhost", "root", "1234", "banco", 3306, nullptr, 0)) {
-        cout << "Error de conexion: " << mysql_error(conn) << "\n";
-        return 1;
+
+void retirar() {
+
+    string numero;
+    double monto;
+
+    cin.ignore();
+
+    cout << "\nCuenta: ";
+    getline(cin, numero);
+
+    cout << "Monto: ";
+    cin >> monto;
+
+    string buscar =
+    "SELECT tipo,saldo FROM cuentas WHERE numero_cuenta = '" + numero + "'";
+
+    mysql_query(conn, buscar.c_str());
+
+    MYSQL_RES* res = mysql_store_result(conn);
+
+    if(mysql_num_rows(res) == 0) {
+        cout << "Cuenta no existe\n";
+        return;
     }
 
-    int opcion;
+    MYSQL_ROW row = mysql_fetch_row(res);
+
+    string tipo = row[0];
+    double saldo = atof(row[1]);
+
+    double comision = 0;
+
+    if(tipo == "ahorro") {
+        comision = monto * 0.02;
+    }
+
+    double total = monto + comision;
+
+    if(total > saldo) {
+        cout << "Saldo insuficiente\n";
+        return;
+    }
+
+    string q =
+    "UPDATE cuentas SET saldo = saldo - " + to_string(total)
+    + " WHERE numero_cuenta = '" + numero + "'";
+
+    mysql_query(conn, q.c_str());
+
+    Transaccion t;
+    t.numero_cuenta = numero;
+    t.tipo = "retiro";
+    t.monto = monto;
+
+    string ins =
+    "INSERT INTO transacciones(numero_cuenta,tipo,monto) VALUES('"
+    + t.numero_cuenta + "','" + t.tipo + "'," + to_string(t.monto) + ")";
+
+    mysql_query(conn, ins.c_str());
+
+    cout<<"EL RETIRO SE REALIZO EXISTOSAMENTE: "<<endl;
+
+    if(comision > 0)
+        cout << "Comision: Q" << comision << endl;
+}
+
+void transferir() {
+
+    string origen, destino, correo;
+    double monto;
+
+    cin.ignore();
+
+    cout << "\nOrigen: ";
+    getline(cin, origen);
+
+    cout << "Destino: ";
+    getline(cin, destino);
+
+    cout << "Correo receptor: ";
+    getline(cin, correo);
+
+    cout << "Monto: ";
+    cin >> monto;
+
+    string debito =
+    "UPDATE cuentas SET saldo = saldo - " + to_string(monto)
+    + " WHERE numero_cuenta = '" + origen + "'";
+
+    string credito =
+    "UPDATE cuentas SET saldo = saldo + " + to_string(monto)
+    + " WHERE numero_cuenta = '" + destino + "'";
+
+    mysql_query(conn, debito.c_str());
+    mysql_query(conn, credito.c_str());
+
+    Transferencia tf;
+    tf.origen = origen;
+    tf.destino = destino;
+    tf.monto = monto;
+
+    string ins =
+    "INSERT INTO transferencias(cuenta_origen,cuenta_destino,monto,estado,correo_receptor) VALUES('"
+    + tf.origen + "','" + tf.destino + "',"
+    + to_string(tf.monto) + ",'completada','" + correo + "')";
+
+    mysql_query(conn, ins.c_str());
+
+    string t1 =
+    "INSERT INTO transacciones(numero_cuenta,tipo,monto) VALUES('"
+    + origen + "','transferencia_enviada'," + to_string(monto) + ")";
+
+    string t2 =
+    "INSERT INTO transacciones(numero_cuenta,tipo,monto) VALUES('"
+    + destino + "','transferencia_recibida'," + to_string(monto) + ")";
+
+    mysql_query(conn, t1.c_str());
+    mysql_query(conn, t2.c_str());
+
+        cout<<"LA TRANSFERENCIA SE REALIZO EXISTOSAMENTE: "<<endl;
+}
+
+void historialCuenta() {
+
+    string numero;
+
+    cin.ignore();
+
+    cout << "\nCuenta: ";
+    getline(cin, numero);
+
+    string q =
+    "SELECT tipo,monto,fecha FROM transacciones WHERE numero_cuenta = '"
+    + numero + "' ORDER BY fecha DESC";
+
+    mysql_query(conn, q.c_str());
+
+    MYSQL_RES* res = mysql_store_result(conn);
+    MYSQL_ROW row;
+
+    cout << "===== HISTORIAL CUENTA ====="<<endl;;
+
+    while((row = mysql_fetch_row(res))) {
+
+        cout << row[0] << " | Q" << row[1] << " | " << row[2] << endl;
+    }
+
+    mysql_free_result(res);
+}
+
+void historialGeneral() {
+
+    string q =
+    "SELECT numero_cuenta,tipo,monto,fecha FROM transacciones ORDER BY fecha DESC LIMIT 10";
+
+    mysql_query(conn, q.c_str());
+
+    MYSQL_RES* res = mysql_store_result(conn);
+    MYSQL_ROW row;
+
+    cout << "==== HISTORIAL GENERAL ====="<<endl;;
+
+    while((row = mysql_fetch_row(res))) {
+
+        cout << row[0] << " | "
+             << row[1] << " | Q"
+             << row[2] << " | "
+             << row[3] << endl;
+    }
+
+    mysql_free_result(res);
+}
+
+int main() {
+
+    srand(time(NULL));
+
+    conectar();
+
+    int op;
 
     do {
-        cout << "\n=== Sistema Bancario ===\n";
-        cout << "1. Crear cuenta\n";
-        cout << "2.Depositar \n";
-        cout << "3. Salir\n";
+
+        cout << "\n===== BANCO ====="<<endl;
+        cout << "1. Crear cuenta"<<endl;
+        cout << "2. Depositar"<<endl;
+        cout << "3. Retirar"<<endl;
+        cout << "4. Transferir"<<endl;
+        cout << "5. Historial cuenta"<<endl;;
+        cout << "6. Historial general"<<endl;;
+        cout << "7. Salir\n";
         cout << "Opcion: ";
-        cin >> opcion;
+        cin >> op;
 
-        switch (opcion) {
-            case 1:
-                crearCuenta(conn);
-                break;
-            
-                case 2:
-                    depositar(conn);
-                break;
+        switch(op) {
 
-            case 3:
-                cout << "Saliendo\n";
-                break;
-
-            default:
-                cout << "Opcion invalida\n";
+            case 1: crearCuenta(); break;
+            case 2: depositar(); break;
+            case 3: retirar(); break;
+            case 4: transferir(); break;
+            case 5: historialCuenta(); break;
+            case 6: historialGeneral(); break;
+            case 7: cout << "Saliendo del programa"<<endl;; break;
+            default: cout << "La opcion no existe"<<endl; break;
         }
 
-    } while (opcion != 3);
+    } while(op != 7);
 
     mysql_close(conn);
+
     return 0;
 }
